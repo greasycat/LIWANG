@@ -1,6 +1,6 @@
 import { AdminPageHeader } from "@/components/admin-header";
 import { UsersTable } from "@/components/users-table";
-import { apiServer } from "@/lib/api";
+import { apiServer } from "@/lib/api-server";
 import type { AdminUserRow } from "@/lib/types";
 
 export default async function AdminUsersPage() {

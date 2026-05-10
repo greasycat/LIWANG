@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { FilesPage } from "@/components/files-page";
-import { ApiError, apiServer } from "@/lib/api";
+import { ApiError, apiServer } from "@/lib/api-server";
 import type { FilesListing } from "@/lib/types";
 
 export default async function AdminUserFilesPage({

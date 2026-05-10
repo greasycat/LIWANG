@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ChatView } from "@/components/chat-view";
-import { ApiError, apiServer } from "@/lib/api";
+import { ApiError, apiServer } from "@/lib/api-server";
 import type { ChatSession, Message } from "@/lib/types";
 
 export default async function ChatPage({

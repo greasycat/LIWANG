@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { apiServer } from "@/lib/api";
+import { apiServer } from "@/lib/api-server";
 import type { ChatSession } from "@/lib/types";
 
 export default async function HomePage() {

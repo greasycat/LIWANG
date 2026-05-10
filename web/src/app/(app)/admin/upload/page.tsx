@@ -1,6 +1,6 @@
 import { AdminPageHeader } from "@/components/admin-header";
 import { UploadManager } from "@/components/upload-manager";
-import { apiServer } from "@/lib/api";
+import { apiServer } from "@/lib/api-server";
 import type { UploadTable } from "@/lib/types";
 
 export default async function AdminUploadPage({

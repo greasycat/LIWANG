@@ -1,15 +1,9 @@
 /**
- * API helpers.
+ * Shared API plumbing — error type + client fetcher.
  *
- * - In Server Components: call `apiServer(path, init)`. It forwards the
- *   incoming session cookie to FastAPI (running behind the rewrite proxy).
- * - In Client Components: call `apiClient(path, init)`. Cookie is attached
- *   automatically by the browser since requests stay same-origin.
+ * Server-only helpers (those that read cookies via `next/headers`) live in
+ * `./api-server` so client bundles don't drag the server-only module in.
  */
-import { cookies } from "next/headers";
-
-const INTERNAL_BASE =
-  process.env.LIWANG_API_URL || "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
   status: number;
@@ -21,7 +15,7 @@ export class ApiError extends Error {
   }
 }
 
-async function parseError(res: Response): Promise<ApiError> {
+export async function parseError(res: Response): Promise<ApiError> {
   let detail: unknown = res.statusText;
   try {
     const j = await res.json();
@@ -30,33 +24,6 @@ async function parseError(res: Response): Promise<ApiError> {
     /* ignore */
   }
   return new ApiError(res.status, detail);
-}
-
-/** Server-side fetch — forwards session cookie. */
-export async function apiServer<T = unknown>(
-  path: string,
-  init?: RequestInit & { allowError?: boolean },
-): Promise<T> {
-  const jar = await cookies();
-  const cookieHeader = jar
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-
-  const url = `${INTERNAL_BASE}${path.startsWith("/api") ? path : `/api${path}`}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      ...(init?.headers || {}),
-      ...(cookieHeader ? { cookie: cookieHeader } : {}),
-    },
-    cache: "no-store",
-  });
-  if (!res.ok && !init?.allowError) {
-    throw await parseError(res);
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
 }
 
 /** Client-side fetch — relies on browser cookie + Next.js rewrite proxy. */

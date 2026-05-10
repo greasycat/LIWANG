@@ -1,6 +1,6 @@
 import { AdminPageHeader } from "@/components/admin-header";
 import { DocsTable } from "@/components/docs-table";
-import { apiServer } from "@/lib/api";
+import { apiServer } from "@/lib/api-server";
 import type { Doc } from "@/lib/types";
 
 export default async function AdminDocsPage() {

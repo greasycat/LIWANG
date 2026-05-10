@@ -1,5 +1,5 @@
 import { FilesPage } from "@/components/files-page";
-import { apiServer } from "@/lib/api";
+import { apiServer } from "@/lib/api-server";
 import type { FilesListing } from "@/lib/types";
 
 export default async function MyFilesPage() {

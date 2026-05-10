@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ApiError, apiServer } from "./api";
+import { ApiError, apiServer } from "./api-server";
 import type { Me } from "./types";
 
 /** Call from a Server Component / Route Handler. Returns null if unauth. */

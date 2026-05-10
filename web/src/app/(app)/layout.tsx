@@ -1,6 +1,6 @@
 import { SidebarShell } from "@/components/sidebar-shell";
 import { Topbar } from "@/components/topbar";
-import { apiServer } from "@/lib/api";
+import { apiServer } from "@/lib/api-server";
 import { requireMe } from "@/lib/auth";
 import type { ChatSession } from "@/lib/types";
 

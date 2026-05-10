@@ -1,5 +1,5 @@
 import { AdminPageHeader } from "@/components/admin-header";
-import { apiServer } from "@/lib/api";
+import { apiServer } from "@/lib/api-server";
 import { formatInt, formatMoney } from "@/lib/format";
 import type { UsageGrid } from "@/lib/types";
 
