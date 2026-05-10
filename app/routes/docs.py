@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 
 from .. import store
 from ..config import settings
 from ..deps import db, require_user
 from ..models import Doc, User
+from ..schemas import DocOut, DocPreviewOut
 
 router = APIRouter()
 
@@ -19,10 +19,6 @@ _ACL_VISIBLE: dict[str, set[str]] = {
     "internal": {"public", "internal"},
     "restricted": {"public", "internal", "restricted"},
 }
-
-
-def _tpl(request: Request) -> Jinja2Templates:
-    return request.app.state.templates
 
 
 def _can_see(user: User, doc: Doc) -> bool:
@@ -47,15 +43,19 @@ def _abs(rel: str | None) -> Path | None:
     return (settings.files_root / rel).resolve()
 
 
-@router.get("/docs/{doc_id}/view", response_class=HTMLResponse)
-def view_doc(request: Request, doc_id: str):
+def _resolve_doc(request: Request, doc_id: str) -> Doc:
     user = require_user(request)
     d = store.get_doc(db(request), doc_id)
     if not d:
-        return HTMLResponse("<div class='p-4 text-sm opacity-60'>文档不存在</div>", status_code=404)
+        raise HTTPException(status_code=404, detail="文档不存在")
     if not _can_see(user, d):
-        return HTMLResponse("<div class='p-4 text-sm opacity-60'>无权访问</div>", status_code=403)
+        raise HTTPException(status_code=403, detail="无权访问")
+    return d
 
+
+@router.get("/docs/{doc_id}/view")
+def view_doc(request: Request, doc_id: str) -> DocPreviewOut:
+    d = _resolve_doc(request, doc_id)
     abs_path = _abs(d.file_path)
     has_file = bool(d.file_path) and abs_path is not None and abs_path.exists()
     kind = _preview_kind(d)
@@ -77,30 +77,23 @@ def view_doc(request: Request, doc_id: str):
         except Exception as ex:  # noqa: BLE001
             error = f"读取失败: {ex}"
 
-    return _tpl(request).TemplateResponse(
-        request,
-        "_citations.html",
-        {
-            "doc": d,
-            "kind": kind,
-            "body": body,
-            "error": error,
-            "has_file": has_file,
-            "raw_url": f"/docs/{d.id}/raw",
-            "download_url": f"/docs/{d.id}/download",
-        },
+    return DocPreviewOut(
+        doc=DocOut.model_validate(d),
+        kind=kind,  # type: ignore[arg-type]
+        body=body,
+        error=error,
+        has_file=has_file,
+        raw_url=f"/api/docs/{d.id}/raw",
+        download_url=f"/api/docs/{d.id}/download",
     )
 
 
 @router.get("/docs/{doc_id}/raw")
 def doc_raw(request: Request, doc_id: str):
-    user = require_user(request)
-    d = store.get_doc(db(request), doc_id)
-    if not d or not _can_see(user, d):
-        return Response(status_code=404)
+    d = _resolve_doc(request, doc_id)
     abs_path = _abs(d.file_path)
     if not abs_path or not abs_path.exists():
-        return Response(status_code=404)
+        raise HTTPException(status_code=404)
     return FileResponse(
         path=str(abs_path),
         media_type=d.mime or "application/octet-stream",
@@ -109,13 +102,10 @@ def doc_raw(request: Request, doc_id: str):
 
 @router.get("/docs/{doc_id}/download")
 def doc_download(request: Request, doc_id: str):
-    user = require_user(request)
-    d = store.get_doc(db(request), doc_id)
-    if not d or not _can_see(user, d):
-        return Response(status_code=404)
+    d = _resolve_doc(request, doc_id)
     abs_path = _abs(d.file_path)
     if not abs_path or not abs_path.exists():
-        return Response(status_code=404)
+        raise HTTPException(status_code=404)
     return FileResponse(
         path=str(abs_path),
         media_type=d.mime or "application/octet-stream",

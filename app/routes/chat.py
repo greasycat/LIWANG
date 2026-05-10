@@ -1,80 +1,55 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import Any
 
-from fastapi import APIRouter, Form, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from .. import store
 from ..config import settings
-from ..deps import current_user, db, require_user, template_globals
+from ..deps import db, require_user
 from ..models import Chunk, Citation, Message
+from ..schemas import MessageOut, PostMessageOut, RatingBody
 
 router = APIRouter()
-
 log = logging.getLogger("liwang.chat")
 
 
-def _tpl(request: Request) -> Jinja2Templates:
-    return request.app.state.templates
+class SendMessageBody(BaseModel):
+    content: str
 
 
-def _ctx(request: Request, **extra) -> dict:
-    base = template_globals(request)
-    base.update(extra)
-    return base
-
-
-@router.get("/")
-def home(request: Request):
-    user = current_user(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    sessions = store.user_sessions(db(request), user.id)
-    if sessions:
-        return RedirectResponse(f"/c/{sessions[0].id}", status_code=303)
-
-    s = store.create_session(db(request), user.id)
-    return RedirectResponse(f"/c/{s.id}", status_code=303)
-
-
-@router.get("/c/{sid}", response_class=HTMLResponse)
-def view_session(request: Request, sid: str):
+def _owned(request: Request, sid: str):
     user = require_user(request)
-    d = db(request)
-    s = store.get_session(d, sid)
+    s = store.get_session(db(request), sid)
     if not s or s.user_id != user.id:
-        return HTMLResponse("not found", status_code=404)
-    return _tpl(request).TemplateResponse(
-        request,
-        "chat.html",
-        _ctx(
-            request,
-            session=s,
-            messages=store.get_messages(d, sid),
-            sessions=store.user_sessions(d, user.id),
-            active_session_id=sid,
-        ),
-    )
+        raise HTTPException(status_code=404, detail="session not found")
+    return user, s
 
 
-@router.post("/c/{sid}/messages", response_class=HTMLResponse)
-async def post_message(request: Request, sid: str, content: str = Form(...)):
-    user = require_user(request)
+@router.get("/sessions/{sid}/messages")
+def list_messages(request: Request, sid: str) -> list[MessageOut]:
+    _owned(request, sid)
+    return [MessageOut.model_validate(m) for m in store.get_messages(db(request), sid)]
+
+
+@router.post("/sessions/{sid}/messages")
+async def post_message(
+    request: Request, sid: str, body: SendMessageBody
+) -> PostMessageOut:
+    user, s = _owned(request, sid)
     d = db(request)
-    s = store.get_session(d, sid)
-    if not s or s.user_id != user.id:
-        return HTMLResponse("not found", status_code=404)
 
-    user_msg = store.add_message(d, sid, "user", content.strip())
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="empty message")
 
-    citations = _retrieve_citations(d, user, content.strip())
-
+    user_msg = store.add_message(d, sid, "user", content)
+    citations = _retrieve_citations(d, user, content)
     pending = store.add_message(
         d,
         sid,
@@ -86,48 +61,36 @@ async def post_message(request: Request, sid: str, content: str = Form(...)):
         cost_cny=0.0,
         model=settings.deepseek_model,
     )
-
-    tpl = _tpl(request)
-    user_html = tpl.get_template("_message.html").render(m=user_msg)
-    assistant_html = (
-        f'<div hx-ext="sse" sse-connect="/c/{sid}/messages/{pending.id}/stream" '
-        f'sse-swap="content" sse-close="done" '
-        f'hx-target="this" hx-swap="innerHTML" '
-        f'class="streaming-msg">'
-        f'<div class="flex gap-3">'
-        f'  <div class="avatar placeholder shrink-0">'
-        f'    <div class="bg-primary text-primary-content w-8 h-8 rounded-lg">'
-        f'      <span class="text-[10px] font-semibold">LIWANG</span>'
-        f'    </div>'
-        f'  </div>'
-        f'  <div class="flex-1 min-w-0">'
-        f'    <div class="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-wrap" id="stream-{pending.id}"></div>'
-        f'    <div class="mt-2 flex items-center gap-2 text-xs opacity-50">'
-        f'      <span class="loading loading-dots loading-xs"></span>'
-        f'      <span>检索 + 生成中…</span>'
-        f'    </div>'
-        f'  </div>'
-        f'</div>'
-        f'</div>'
+    return PostMessageOut(
+        user_message=MessageOut.model_validate(user_msg),
+        pending_message=MessageOut.model_validate(pending),
+        stream_url=f"/api/messages/{pending.id}/stream",
     )
-    return HTMLResponse(user_html + assistant_html)
 
 
-@router.get("/c/{sid}/messages/{mid}/stream")
-async def stream_message(request: Request, sid: str, mid: str):
+@router.get("/messages/{mid}/stream")
+async def stream_message(request: Request, mid: str):
+    """SSE stream that emits JSON deltas for a pending assistant message.
+
+    Events:
+      - event: delta   data: {"content": "<full accumulated text>"}
+      - event: done    data: {"message": <MessageOut>}
+      - event: error   data: {"error": "..."}
+    """
     from ..db import SessionLocal
     from ..services import llm
 
     user = require_user(request)
     d = db(request)
-    s = store.get_session(d, sid)
-    if not s or s.user_id != user.id:
-        return Response(status_code=404)
 
     target = store.find_message(d, mid)
-    if not target or target.session_id != sid:
-        return Response(status_code=404)
+    if not target:
+        raise HTTPException(status_code=404, detail="message not found")
+    s = store.get_session(d, target.session_id)
+    if not s or s.user_id != user.id:
+        raise HTTPException(status_code=404, detail="message not found")
 
+    sid = target.session_id
     msgs = store.get_messages(d, sid)
     user_q = ""
     for i, m in enumerate(msgs):
@@ -135,7 +98,6 @@ async def stream_message(request: Request, sid: str, mid: str):
             user_q = msgs[i - 1].content
             break
 
-    # Hydrate retrieved chunks for the LLM context block.
     chunk_ids = [c.chunk_id for c in (target.citations or [])]
     chunk_map: dict[str, Chunk] = {}
     if chunk_ids:
@@ -155,7 +117,6 @@ async def stream_message(request: Request, sid: str, mid: str):
             }
         )
 
-    # Trailing N turns of history (exclude the empty assistant placeholder).
     history: list[tuple[str, str]] = []
     for m in msgs:
         if m.id == mid:
@@ -174,30 +135,23 @@ async def stream_message(request: Request, sid: str, mid: str):
 
         if canned_fallback:
             answer = store._canned_answer(user_q[:24] or "您的问题")
-            chunks = _split_for_stream(answer, n=22)
-            for c in chunks:
+            for c in _split_for_stream(answer, n=22):
                 accumulated += c
-                yield _wrap_sse(_render_assistant_streaming(target, accumulated, request))
+                yield _sse("delta", {"content": accumulated})
                 await asyncio.sleep(0.04)
         else:
             async for evt in llm.stream_chat(history, user_q, context_chunks):
                 if evt.error:
                     error_note = evt.error
                     accumulated += f"\n\n⚠ {evt.error}"
-                    yield _wrap_sse(
-                        _render_assistant_streaming(target, accumulated, request)
-                    )
+                    yield _sse("delta", {"content": accumulated})
                     break
                 if evt.delta:
                     accumulated += evt.delta
-                    yield _wrap_sse(
-                        _render_assistant_streaming(target, accumulated, request)
-                    )
+                    yield _sse("delta", {"content": accumulated})
                 if evt.usage:
                     usage_obj = evt.usage
 
-        # Persist final state in a fresh DB session (the request session
-        # may be closing as we stream).
         with SessionLocal() as wdb:
             saved = wdb.get(Message, mid)
             if saved:
@@ -206,10 +160,7 @@ async def stream_message(request: Request, sid: str, mid: str):
                     saved.prompt_tokens = usage_obj.prompt_tokens
                     saved.completion_tokens = usage_obj.completion_tokens
                     saved.cost_cny = llm.estimate_cost_cny(usage_obj)
-                if canned_fallback:
-                    saved.model = "canned-stub"
-                else:
-                    saved.model = model_name
+                saved.model = "canned-stub" if canned_fallback else model_name
                 wdb.commit()
             if usage_obj is not None and not canned_fallback:
                 store.add_usage(
@@ -222,44 +173,26 @@ async def stream_message(request: Request, sid: str, mid: str):
                     cost_cny=llm.estimate_cost_cny(usage_obj),
                 )
             elif canned_fallback:
-                # still bump query count so usage_monthly reflects activity
                 store.add_usage(wdb, user_id, queries=1)
 
             final = wdb.get(Message, mid)
-            final_html = _tpl(request).get_template("_message.html").render(m=final)
-        yield _wrap_sse(final_html)
-        yield "event: done\ndata: end\n\n"
+            payload = MessageOut.model_validate(final).model_dump(mode="json")
+        yield _sse("done", {"message": payload, "error": error_note})
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
-def _wrap_sse(html: str) -> str:
-    return f"event: content\ndata: {_encode(html)}\n\n"
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def _split_for_stream(text: str, n: int) -> list[str]:
     size = max(1, len(text) // n)
     return [text[i : i + size] for i in range(0, len(text), size)]
-
-
-def _encode(html: str) -> str:
-    return html.replace("\n", "")
-
-
-def _render_assistant_streaming(msg: Message, partial: str, request: Request) -> str:
-    snapshot = Message(
-        id=msg.id,
-        session_id=msg.session_id,
-        role="assistant",
-        content=partial,
-        citations=[],
-        prompt_tokens=0,
-        completion_tokens=0,
-        cost_cny=0.0,
-        model=msg.model,
-        created_at=msg.created_at,
-    )
-    return _tpl(request).get_template("_message.html").render(m=snapshot)
 
 
 def _retrieve_citations(d, user, query: str) -> list[Citation]:
@@ -274,9 +207,8 @@ def _retrieve_citations(d, user, query: str) -> list[Citation]:
         return []
 
 
-@router.post("/messages/{mid}/rating")
-def rate_message(request: Request, mid: str, value: int = 0):
+@router.post("/messages/{mid}/rating", status_code=204)
+def rate_message(request: Request, mid: str, body: RatingBody) -> None:
     require_user(request)
-    if not store.set_message_rating(db(request), mid, value):
-        return Response(status_code=404)
-    return Response(status_code=204)
+    if not store.set_message_rating(db(request), mid, body.value):
+        raise HTTPException(status_code=404, detail="message not found")

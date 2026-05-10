@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+.scroll-shadow {
+  background-attachment: local, local, scroll, scroll;
+  background-image:
+    linear-gradient(white, white),
+    linear-gradient(white, white),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05), transparent),
+    linear-gradient(to top, rgba(0, 0, 0, 0.05), transparent);
+  background-position: top, bottom, top, bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 1.5em, 100% 1.5em, 100% 1em, 100% 1em;
+}
+
+.chat-bubble-user {
+  background: oklch(var(--p) / 0.12);
+  border: 1px solid oklch(var(--p) / 0.25);
+}
+
+.prose :where(p):not(:where([class~="not-prose"] *)) {
+  margin: 0.4em 0;
+}

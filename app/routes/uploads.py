@@ -6,12 +6,12 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from .. import store
 from ..config import settings
-from ..deps import db, require_admin, template_globals
+from ..deps import db, require_admin
+from ..schemas import BulkAction, UploadOut, UploadPatch, UploadTable
 
 router = APIRouter()
 
@@ -31,59 +31,27 @@ def _abs(rel: str | None) -> Path | None:
     return (settings.files_root / rel).resolve()
 
 
-def _render(request: Request, template: str, **extra) -> HTMLResponse:
-    base = template_globals(request)
-    base.update(extra)
-    base.setdefault("sessions", [])
-    base.setdefault("active_session_id", None)
-    base["counts"] = store.upload_counts(db(request))
-    base["status_labels"] = store.STATUS_LABELS
-    return request.app.state.templates.TemplateResponse(request, template, base)
-
-
-def _row(request: Request, item) -> HTMLResponse:
-    base = template_globals(request)
-    base["item"] = item
-    base["status_labels"] = store.STATUS_LABELS
-    return request.app.state.templates.TemplateResponse(
-        request, "admin/_upload_row.html", base
-    )
-
-
-def _table(request: Request, status: str | None = None) -> HTMLResponse:
-    return _render(
-        request,
-        "admin/_upload_table.html",
-        items=store.filter_uploads(db(request), status),
+def _table(request: Request, status: str | None) -> UploadTable:
+    d = db(request)
+    return UploadTable(
+        items=[UploadOut.model_validate(x) for x in store.filter_uploads(d, status)],
+        counts=store.upload_counts(d),
+        status_labels=store.STATUS_LABELS,
         active_filter=status or "all",
     )
 
 
-@router.get("", response_class=HTMLResponse)
-def upload_page(request: Request, status: str | None = None):
-    require_admin(request)
-    flt = status if status in store.UPLOAD_STATUSES else None
-    return _render(
-        request,
-        "admin/upload.html",
-        page="upload",
-        items=store.filter_uploads(db(request), flt),
-        active_filter=status or "all",
-    )
-
-
-@router.get("/table", response_class=HTMLResponse)
-def upload_table(request: Request, status: str | None = None):
+@router.get("")
+def upload_table(request: Request, status: str | None = None) -> UploadTable:
     require_admin(request)
     flt = status if status in store.UPLOAD_STATUSES else None
     return _table(request, flt)
 
 
-@router.post("/intake", response_class=HTMLResponse)
+@router.post("/intake", status_code=201)
 async def intake(
-    request: Request,
-    files: list[UploadFile] = File(...),
-):
+    request: Request, files: list[UploadFile] = File(...)
+) -> UploadTable:
     user = require_admin(request)
     d = db(request)
     docs_dir = _docs_dir()
@@ -111,8 +79,8 @@ async def intake(
     return _table(request, None)
 
 
-@router.delete("/{uid}", response_class=HTMLResponse)
-def delete_one(request: Request, uid: str):
+@router.delete("/{uid}")
+def delete_one(request: Request, uid: str) -> UploadTable:
     require_admin(request)
     d = db(request)
     item = store.delete_upload(d, uid)
@@ -128,83 +96,47 @@ def delete_one(request: Request, uid: str):
     return _table(request, None)
 
 
-@router.patch("/{uid}", response_class=HTMLResponse)
-def patch_one(
-    request: Request,
-    uid: str,
-    dept: str | None = Form(None),
-    doc_type: str | None = Form(None),
-    version: str | None = Form(None),
-    acl: str | None = Form(None),
-    no_llm: str | None = Form(None),
-):
+@router.patch("/{uid}")
+def patch_one(request: Request, uid: str, body: UploadPatch) -> UploadOut:
     require_admin(request)
-    fields: dict = {}
-    if dept is not None:
-        fields["dept"] = dept
-    if doc_type is not None:
-        fields["doc_type"] = doc_type
-    if version is not None:
-        fields["version"] = version
-    if acl in ("public", "internal", "restricted"):
-        fields["acl"] = acl
-    if no_llm is not None:
-        fields["no_llm"] = no_llm in ("on", "true", "1")
+    fields = body.model_dump(exclude_unset=True, exclude_none=True)
     item = store.update_upload(db(request), uid, **fields)
     if not item:
-        return Response(status_code=404)
-    return _row(request, item)
+        raise HTTPException(status_code=404)
+    return UploadOut.model_validate(item)
 
 
-@router.get("/{uid}/edit", response_class=HTMLResponse)
-def edit_form(request: Request, uid: str):
-    require_admin(request)
-    item = store.get_upload(db(request), uid)
-    if not item:
-        return Response(status_code=404)
-    base = template_globals(request)
-    base["item"] = item
-    return request.app.state.templates.TemplateResponse(
-        request, "admin/_upload_edit_modal.html", base
-    )
-
-
-@router.post("/{uid}/start", response_class=HTMLResponse)
-async def start_one(request: Request, uid: str):
+@router.post("/{uid}/start")
+def start_one(request: Request, uid: str) -> UploadOut:
     require_admin(request)
     d = db(request)
     item = store.get_upload(d, uid)
     if not item:
-        return Response(status_code=404)
+        raise HTTPException(status_code=404)
     if item.status not in ("queued", "failed"):
-        return _row(request, item)
+        return UploadOut.model_validate(item)
     _start_ingest(d, item)
-    return _row(request, store.get_upload(d, uid))
+    return UploadOut.model_validate(store.get_upload(d, uid))
 
 
 def _start_ingest(d, item) -> None:
-    """Promote a staged Upload to a Doc + schedule background ingest."""
-    from ..services.ingest import ingest_upload  # local import to keep optional
+    from ..services.ingest import ingest_upload
 
-    # mark as in-flight on the staging row so UI polling sees progress
     store.update_upload(
         d, item.id, status="parsing", progress=10, started_at=store.now(), error=None
     )
     asyncio.create_task(ingest_upload(item.id))
 
 
-@router.post("/bulk", response_class=HTMLResponse)
-async def bulk_action(request: Request):
+@router.post("/bulk")
+def bulk_action(request: Request, body: BulkAction) -> UploadTable:
     require_admin(request)
     d = db(request)
-    form = await request.form()
-    action = form.get("action")
-    ids = form.getlist("ids")
-    if not action or not ids:
+    if not body.action or not body.ids:
         return _table(request, None)
 
-    if action == "delete":
-        for uid in ids:
+    if body.action == "delete":
+        for uid in body.ids:
             item = store.delete_upload(d, uid)
             if item and item.file_path:
                 try:
@@ -215,28 +147,26 @@ async def bulk_action(request: Request):
                     pass
                 except OSError:
                     pass
-    elif action == "start":
-        for uid in ids:
+    elif body.action == "start":
+        for uid in body.ids:
             item = store.get_upload(d, uid)
             if item and item.status in ("queued", "failed"):
                 _start_ingest(d, item)
-    elif action == "set_dept":
-        v = form.get("value", "").strip()
-        if v:
-            for uid in ids:
-                store.update_upload(d, uid, dept=v)
-    elif action == "set_type":
-        v = form.get("value", "").strip()
-        if v:
-            for uid in ids:
-                store.update_upload(d, uid, doc_type=v)
-    elif action == "set_acl":
-        v = form.get("value", "")
-        if v in ("public", "internal", "restricted"):
-            for uid in ids:
-                store.update_upload(d, uid, acl=v)
-    elif action == "set_no_llm":
-        v = form.get("value", "false") in ("true", "1", "on")
-        for uid in ids:
+    elif body.action == "set_dept" and body.value:
+        for uid in body.ids:
+            store.update_upload(d, uid, dept=body.value)
+    elif body.action == "set_type" and body.value:
+        for uid in body.ids:
+            store.update_upload(d, uid, doc_type=body.value)
+    elif body.action == "set_acl" and body.value in (
+        "public",
+        "internal",
+        "restricted",
+    ):
+        for uid in body.ids:
+            store.update_upload(d, uid, acl=body.value)
+    elif body.action == "set_no_llm":
+        v = (body.value or "false") in ("true", "1", "on")
+        for uid in body.ids:
             store.update_upload(d, uid, no_llm=v)
     return _table(request, None)
