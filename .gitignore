@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .env
 .ruff_cache/
+*.egg-info/
 data/
 var/
 *.sqlite
