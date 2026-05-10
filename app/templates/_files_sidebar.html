@@ -1,0 +1,57 @@
+<div class="p-3 border-b border-base-300 space-y-2">
+  {% if viewing_as_admin %}
+    <a href="/admin/users" class="btn btn-ghost btn-sm w-full justify-start gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+      返回用户管理
+    </a>
+  {% else %}
+    <a href="/" class="btn btn-ghost btn-sm w-full justify-start gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+      返回对话
+    </a>
+  {% endif %}
+</div>
+
+<nav class="flex-1 overflow-y-auto px-2 py-2">
+  <div class="px-2 mb-1.5 text-[10px] uppercase tracking-wider opacity-50 font-medium flex items-center justify-between">
+    <span>{% if viewing_as_admin %}{{ target_user.display_name }} 的空间{% else %}我的空间{% endif %}</span>
+    <span class="text-[10px] opacity-60 font-mono normal-case tracking-normal">{{ storage_used | filesize }}</span>
+  </div>
+
+  <ul class="menu menu-sm gap-0.5 p-0">
+    <li>
+      <a href="{{ link_base }}" class="{% if not active_folder_id %}menu-active{% endif %} flex items-center gap-2">
+        <span>📂</span>
+        <span>根目录</span>
+      </a>
+    </li>
+  </ul>
+
+  {% if folder_tree %}
+    <div class="mt-3 px-2 mb-1 text-[10px] uppercase tracking-wider opacity-50 font-medium">文件夹</div>
+    <ul class="menu menu-sm gap-0.5 p-0">
+      {% for f, depth in folder_tree %}
+        <li style="padding-left: {{ depth * 12 }}px">
+          <a href="{{ link_base }}/folder/{{ f.id }}"
+             class="{% if active_folder_id == f.id %}menu-active{% endif %} flex items-center gap-2">
+            <span class="text-xs opacity-60">{% if depth %}└{% else %}📁{% endif %}</span>
+            <span class="truncate">{{ f.name }}</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</nav>
+
+<div class="p-3 border-t border-base-300 text-xs">
+  <div class="opacity-60 mb-1 flex justify-between">
+    <span>存储用量</span>
+    <span class="font-mono">{{ '%.0f' % storage_pct }}%</span>
+  </div>
+  {% set pct = storage_pct %}
+  <progress class="progress {% if pct > 80 %}progress-warning{% elif pct > 95 %}progress-error{% else %}progress-primary{% endif %} h-1.5"
+            value="{{ storage_used }}" max="{{ storage_quota }}"></progress>
+  <div class="mt-1 text-[10px] opacity-60 font-mono text-right">
+    {{ storage_used | filesize }} / {{ storage_quota | filesize }}
+  </div>
+</div>

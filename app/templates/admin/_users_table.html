@@ -1,0 +1,83 @@
+<div id="users-table" class="card bg-base-100 border border-base-300 shadow-sm overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="table table-sm">
+      <thead class="text-xs uppercase tracking-wider opacity-70 bg-base-200">
+        <tr>
+          <th>用户</th>
+          <th>角色</th>
+          <th>访问</th>
+          <th class="text-right">本月 tokens</th>
+          <th class="text-right">月度上限</th>
+          <th class="text-right">已用存储</th>
+          <th class="text-right">存储上限</th>
+          <th class="w-44 text-right pr-4">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u, used, used_bytes in rows %}
+          {% set token_pct = (used / u.monthly_token_cap * 100) if u.monthly_token_cap else 0 %}
+          {% set storage_pct = (used_bytes / u.storage_quota_bytes * 100) if u.storage_quota_bytes else 0 %}
+          <tr class="hover">
+            <td>
+              <div class="flex items-center gap-2.5">
+                <div class="avatar placeholder">
+                  <div class="bg-base-300 text-base-content w-7 rounded-full"><span class="text-xs">{{ u.display_name[:1] }}</span></div>
+                </div>
+                <div>
+                  <div class="font-medium text-sm">{{ u.display_name }}</div>
+                  <div class="text-[11px] opacity-60 font-mono">{{ u.username }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              {% if u.role == 'admin' %}<span class="badge badge-primary badge-sm">管理员</span>
+              {% else %}<span class="badge badge-ghost badge-sm">用户</span>{% endif %}
+            </td>
+            <td>
+              <button class="badge badge-sm cursor-pointer hover:opacity-80
+                             {% if u.acl_max == 'restricted' %}badge-error
+                             {% elif u.acl_max == 'internal' %}badge-warning
+                             {% else %}badge-success{% endif %}"
+                      hx-get="/admin/users/{{ u.id }}/edit-form"
+                      hx-target="#modal-slot" hx-swap="innerHTML"
+                      title="点击修改">
+                {% if u.acl_max == 'restricted' %}受限{% elif u.acl_max == 'internal' %}内部{% else %}公开{% endif %}
+              </button>
+            </td>
+            <td class="text-right font-mono text-sm">{{ used | intcomma }}</td>
+            <td class="text-right">
+              {% if u.monthly_token_cap %}
+                <div class="flex items-center gap-1.5 justify-end">
+                  <span class="font-mono text-xs {% if token_pct > 80 %}text-warning{% endif %} {% if token_pct > 100 %}text-error{% endif %}">{{ '%.0f' % token_pct }}%</span>
+                  <progress class="progress {% if token_pct > 80 %}progress-warning{% else %}progress-primary{% endif %} w-16 h-1.5" value="{{ used }}" max="{{ u.monthly_token_cap }}"></progress>
+                </div>
+                <div class="text-[10px] opacity-60 font-mono mt-0.5">{{ u.monthly_token_cap | intcomma }}</div>
+              {% else %}<span class="opacity-40 text-xs">无限制</span>{% endif %}
+            </td>
+            <td class="text-right font-mono text-sm">{{ used_bytes | filesize }}</td>
+            <td class="text-right">
+              <div class="flex items-center gap-1.5 justify-end">
+                <span class="font-mono text-xs {% if storage_pct > 80 %}text-warning{% endif %} {% if storage_pct > 100 %}text-error{% endif %}">{{ '%.0f' % storage_pct }}%</span>
+                <progress class="progress {% if storage_pct > 80 %}progress-warning{% else %}progress-primary{% endif %} w-16 h-1.5" value="{{ used_bytes }}" max="{{ u.storage_quota_bytes }}"></progress>
+              </div>
+              <div class="text-[10px] opacity-60 font-mono mt-0.5">{{ u.storage_quota_bytes | filesize }}</div>
+            </td>
+            <td class="pr-4">
+              <div class="flex justify-end items-center gap-1 whitespace-nowrap">
+                <a href="/admin/files/{{ u.id }}" class="btn btn-ghost btn-xs gap-1" title="浏览此用户的个人文件空间">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v11a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                  文件
+                </a>
+                <button class="btn btn-ghost btn-xs"
+                        hx-get="/admin/users/{{ u.id }}/edit-form"
+                        hx-target="#modal-slot" hx-swap="innerHTML">
+                  编辑配额
+                </button>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

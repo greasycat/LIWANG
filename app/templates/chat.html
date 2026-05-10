@@ -1,0 +1,56 @@
+{% extends "_layout.html" %}
+{% block title %}{{ session.title if session else "新对话" }} · LIWANG 知识助手{% endblock %}
+
+{% block main %}
+<main class="flex-1 overflow-hidden flex flex-col bg-base-200">
+  <div id="chat-scroll" class="flex-1 overflow-y-auto"
+       x-data="{ scrollBottom() { this.$nextTick(() => { this.$el.scrollTop = this.$el.scrollHeight; }); } }"
+       x-init="scrollBottom()"
+       @htmx:after-swap.window="scrollBottom()"
+       @sse:message.window="scrollBottom()">
+
+    <div class="max-w-3xl mx-auto w-full px-4 md:px-6 py-6">
+      {% if not messages %}{% include "_empty.html" %}{% endif %}
+      <div class="space-y-6" id="messages">
+        {% for m in messages %}{% include "_message.html" %}{% endfor %}
+      </div>
+      <div id="streaming-slot"></div>
+    </div>
+  </div>
+
+  <div class="border-t border-base-300 bg-base-100">
+    <div class="max-w-3xl mx-auto w-full px-4 md:px-6 py-3">
+      <form id="composer"
+            hx-post="/c/{{ session.id }}/messages"
+            hx-target="#messages"
+            hx-swap="beforeend"
+            hx-on::after-request="this.reset(); this.querySelector('textarea').style.height = 'auto';"
+            x-data="{ msg: '' }">
+        <div class="rounded-2xl border border-base-300 focus-within:border-primary transition-colors bg-base-100 shadow-sm overflow-hidden">
+          <textarea
+            name="content"
+            x-model="msg"
+            @input="$el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight, 240) + 'px'"
+            @keydown.enter.prevent="if(!$event.shiftKey && msg.trim()){ $el.form.requestSubmit(); }"
+            placeholder="问点什么… (Shift+Enter 换行)"
+            rows="1"
+            class="textarea w-full border-0 focus:outline-none resize-none bg-transparent text-sm py-3 px-4"
+            style="min-height: 48px;"></textarea>
+          <div class="flex items-center justify-end px-3 pb-2 pt-1">
+            <button type="submit" class="btn btn-primary btn-sm gap-1" :disabled="!msg.trim()">
+              发送
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+          </div>
+        </div>
+      </form>
+      <p class="mt-1.5 text-[10px] text-center opacity-50">回答可能不准确 · 请核对引用来源</p>
+    </div>
+  </div>
+</main>
+
+<div id="modal-slot"></div>
+<div id="citation-drawer"></div>
+{% endblock %}
+
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}

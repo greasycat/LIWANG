@@ -1,0 +1,16 @@
+<dialog class="modal modal-open" x-data x-init="$el.showModal()"
+        @close="document.getElementById('modal-slot').replaceChildren()">
+  <div class="modal-box max-w-sm">
+    <h3 class="font-semibold mb-3">重命名{% if file.is_folder %}文件夹{% else %}文件{% endif %}</h3>
+    <form hx-patch="{{ api_base }}/{{ file.id }}" hx-target="#files-listing" hx-swap="outerHTML"
+          hx-on::after-request="document.getElementById('modal-slot').replaceChildren()">
+      <input name="name" value="{{ file.name }}" autofocus required class="input input-bordered w-full" />
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost btn-sm"
+                @click="document.getElementById('modal-slot').replaceChildren()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

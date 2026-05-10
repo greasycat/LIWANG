@@ -1,0 +1,61 @@
+{% set has_running = items | selectattr('doc') | rejectattr('doc', 'none') | map(attribute='doc.embed_status') | select('in', ['embedding', 'pending']) | list | length > 0 %}
+<div id="files-listing"
+     {% if has_running %}
+     hx-get="{{ link_base }}{% if parent_id %}/folder/{{ parent_id }}{% endif %}"
+     hx-trigger="every 3s"
+     hx-select="#files-listing"
+     hx-swap="outerHTML"
+     {% endif %}>
+  <div class="card bg-base-100 border border-base-300 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead class="text-xs uppercase tracking-wider opacity-70 bg-base-200">
+          <tr>
+            <th class="w-8">
+              <input type="checkbox" class="checkbox checkbox-xs"
+                     :checked="selected.size > 0 && selected.size === document.querySelectorAll('[data-file-row]').length"
+                     :indeterminate="selected.size > 0 && selected.size < document.querySelectorAll('[data-file-row]').length"
+                     @change="selectAll($event.target.checked)" />
+            </th>
+            <th>名称</th>
+            <th>访问</th>
+            <th>嵌入状态</th>
+            <th class="text-right">大小</th>
+            <th>修改时间</th>
+            <th class="w-24"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if parent_id %}
+            {% set parent_chain = crumbs %}
+            {% set up_to = (parent_chain[-2].id if parent_chain|length >= 2 else '') %}
+            <tr class="hover">
+              <td></td>
+              <td colspan="6">
+                <a href="{% if up_to %}{{ link_base }}/folder/{{ up_to }}{% else %}{{ link_base }}{% endif %}"
+                   class="link link-hover text-sm flex items-center gap-2 opacity-70">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                  返回上级
+                </a>
+              </td>
+            </tr>
+          {% endif %}
+
+          {% for f in items %}
+            {% include "_files_row.html" %}
+          {% endfor %}
+
+          {% if not items %}
+            <tr>
+              <td colspan="7" class="text-center py-12">
+                <div class="text-4xl opacity-30">📂</div>
+                <div class="mt-2 text-sm opacity-50">此文件夹为空</div>
+                <div class="mt-1 text-xs opacity-40">拖拽文件到此处上传</div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

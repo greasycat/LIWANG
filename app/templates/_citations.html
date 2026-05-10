@@ -1,0 +1,61 @@
+<div x-data="{ open: true }" x-init="open = true" x-show="open" x-cloak
+     class="fixed inset-0 z-50 flex justify-end" @keydown.escape.window="open = false">
+  <div class="fixed inset-0 bg-black/30" @click="open = false"></div>
+  <aside class="relative w-full max-w-2xl bg-base-100 shadow-2xl flex flex-col h-full">
+    <header class="flex items-center justify-between px-4 py-3 border-b border-base-300 shrink-0">
+      <div class="min-w-0">
+        <h2 class="text-sm font-semibold truncate">{{ doc.source }}</h2>
+        <p class="text-[10px] opacity-60 mt-0.5">
+          {{ doc.dept }} · {{ doc.doc_type }} · {{ doc.version }}
+          {% if doc.effective_date %} · 生效 {{ doc.effective_date }}{% endif %}
+          · 切片 {{ doc.chunks }}
+        </p>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        {% if has_file %}
+          <a href="{{ download_url }}" download class="btn btn-ghost btn-xs gap-1" title="下载原件">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"/></svg>
+          </a>
+        {% endif %}
+        <button class="btn btn-ghost btn-sm btn-circle"
+                @click="open = false; setTimeout(() => $el.closest('aside').parentElement.remove(), 200)"
+                aria-label="关闭">✕</button>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-hidden bg-base-200">
+      {% if error %}
+        <div class="h-full flex items-center justify-center px-6 text-center">
+          <div>
+            <div class="text-3xl opacity-30">📭</div>
+            <div class="mt-2 text-sm opacity-70">{{ error }}</div>
+            {% if has_file %}
+              <a href="{{ download_url }}" download class="btn btn-primary btn-sm mt-4">下载原文件</a>
+            {% endif %}
+          </div>
+        </div>
+      {% elif kind == 'pdf' %}
+        <iframe src="{{ raw_url }}#view=FitH" class="w-full h-full" frameborder="0" title="{{ doc.source }}"></iframe>
+      {% elif kind in ('docx', 'text') %}
+        <div class="h-full overflow-auto bg-base-100">
+          <pre class="text-sm leading-relaxed whitespace-pre-wrap p-6 font-sans">{{ body }}</pre>
+        </div>
+      {% else %}
+        <div class="h-full flex items-center justify-center px-6 text-center">
+          <div>
+            <div class="text-3xl opacity-30">📎</div>
+            <div class="mt-2 text-sm opacity-70">此格式暂不支持在线预览</div>
+            {% if has_file %}
+              <a href="{{ download_url }}" download class="btn btn-primary btn-sm mt-4">下载原文件</a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <footer class="border-t border-base-300 px-4 py-2 flex items-center justify-between text-[11px] opacity-60 shrink-0">
+      <span>访问级别 {{ doc.acl }}{% if doc.no_llm %} · 仅检索 (no-LLM){% endif %}</span>
+      <span>嵌入状态 {{ doc.embed_status }}</span>
+    </footer>
+  </aside>
+</div>

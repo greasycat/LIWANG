@@ -1,0 +1,57 @@
+{% extends "_layout.html" %}
+
+{% block sidebar %}
+<div class="p-3 border-b border-base-300">
+  <a href="/" class="btn btn-ghost btn-sm w-full justify-start gap-2">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+    返回对话
+  </a>
+</div>
+
+<nav class="flex-1 overflow-y-auto px-2 py-2">
+  <div class="text-[10px] uppercase tracking-wider opacity-50 font-medium px-2 mb-1">概览</div>
+  <ul class="menu menu-sm gap-0.5 p-0">
+    <li><a href="/admin" class="{% if page == 'overview' %}menu-active{% endif %}">仪表板</a></li>
+  </ul>
+
+  <div class="text-[10px] uppercase tracking-wider opacity-50 font-medium px-2 mt-4 mb-1">用户与配额</div>
+  <ul class="menu menu-sm gap-0.5 p-0">
+    <li><a href="/admin/users" class="{% if page == 'users' %}menu-active{% endif %}">用户管理</a></li>
+    <li><a href="/admin/usage" class="{% if page == 'usage' %}menu-active{% endif %}">Token 用量</a></li>
+  </ul>
+
+  <div class="text-[10px] uppercase tracking-wider opacity-50 font-medium px-2 mt-4 mb-1">知识库</div>
+  <ul class="menu menu-sm gap-0.5 p-0">
+    <li><a href="/admin/docs" class="{% if page == 'docs' %}menu-active{% endif %}">文档库</a></li>
+    <li><a href="/admin/upload" class="{% if page == 'upload' %}menu-active{% endif %}">批量上传</a></li>
+    <li><a href="/admin/ocr" class="{% if page == 'ocr' %}menu-active{% endif %}">OCR 队列</a></li>
+  </ul>
+
+  <div class="text-[10px] uppercase tracking-wider opacity-50 font-medium px-2 mt-4 mb-1">系统</div>
+  <ul class="menu menu-sm gap-0.5 p-0">
+    <li><a href="/admin/eval" class="{% if page == 'eval' %}menu-active{% endif %}">评估</a></li>
+    <li><a href="/admin/settings" class="{% if page == 'settings' %}menu-active{% endif %}">系统设置</a></li>
+  </ul>
+</nav>
+
+<div class="p-3 border-t border-base-300 text-xs opacity-60">
+  <span>管理后台 v0.1</span>
+</div>
+{% endblock %}
+
+{% block main %}
+<main class="flex-1 overflow-y-auto bg-base-200">
+  <div class="max-w-7xl mx-auto w-full px-4 md:px-8 py-6">
+    {% block admin_header %}
+      <div class="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 class="text-xl font-semibold tracking-tight">{% block admin_title %}{% endblock %}</h1>
+          {% block admin_sub %}{% endblock %}
+        </div>
+        {% block admin_actions %}{% endblock %}
+      </div>
+    {% endblock %}
+    {% block admin_body %}{% endblock %}
+  </div>
+</main>
+{% endblock %}

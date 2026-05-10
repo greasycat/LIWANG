@@ -1,0 +1,81 @@
+{% extends "admin/_layout.html" %}
+{% block title %}系统设置 · 管理后台{% endblock %}
+{% block admin_title %}系统设置{% endblock %}
+
+{% block admin_body %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body p-5">
+      <h3 class="font-semibold text-sm">价格表 (CNY / 1k tokens)</h3>
+      <table class="table table-sm mt-3">
+        <tbody>
+          <tr><td class="text-sm">DeepSeek-V3 输入</td><td class="text-right font-mono text-sm">¥0.0010</td></tr>
+          <tr><td class="text-sm">DeepSeek-V3 缓存命中</td><td class="text-right font-mono text-sm">¥0.0001</td></tr>
+          <tr><td class="text-sm">DeepSeek-V3 输出</td><td class="text-right font-mono text-sm">¥0.0020</td></tr>
+          <tr><td class="text-sm">DashScope text-embedding-v3</td><td class="text-right font-mono text-sm">¥0.0005</td></tr>
+        </tbody>
+      </table>
+      <button class="btn btn-ghost btn-xs self-end mt-2">编辑价格表</button>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body p-5">
+      <h3 class="font-semibold text-sm">默认配额</h3>
+      <div class="space-y-3 mt-3">
+        <label class="form-control">
+          <div class="label py-1"><span class="label-text text-xs">用户月度 token 上限</span></div>
+          <input type="number" value="200000" class="input input-bordered input-sm" />
+        </label>
+        <label class="cursor-pointer label justify-start gap-2 py-1">
+          <input type="checkbox" class="toggle toggle-sm toggle-primary" checked />
+          <span class="text-xs">超额时阻止请求</span>
+        </label>
+        <label class="cursor-pointer label justify-start gap-2 py-1">
+          <input type="checkbox" class="toggle toggle-sm toggle-primary" />
+          <span class="text-xs">用量达 80% 时邮件提醒</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm lg:col-span-2">
+    <div class="card-body p-5">
+      <h3 class="font-semibold text-sm">系统提示词 (zh-CN)</h3>
+      <textarea class="textarea textarea-bordered mt-3 font-mono text-xs" rows="6">你是「LIWANG公司内部知识助手」。基于检索到的内部文档片段回答用户问题。
+- 必须引用来源 [doc:chunk]
+- 若上下文不足以回答，明确说明并建议联系相关部门
+- 严格按上下文事实回答，不杜撰
+- 用简体中文回答</textarea>
+      <div class="flex gap-2 justify-end mt-2">
+        <button class="btn btn-ghost btn-sm">恢复默认</button>
+        <button class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm lg:col-span-2">
+    <div class="card-body p-5">
+      <h3 class="font-semibold text-sm">特性开关</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+        {% for label, on, desc in [
+          ("启用重排 (Reranker)", true, "bge-reranker-v2-m3 在 VPS CPU 上运行"),
+          ("查询改写", false, "用 LLM 扩展同义词、拆分多跳问题"),
+          ("术语词典加权", true, "公司专有名词检索时加分"),
+          ("引用预览侧栏", true, "点击引用直接预览原文档（PDF/DOCX/TXT）"),
+        ] %}
+          <label class="cursor-pointer label justify-start gap-3 p-3 rounded-lg bg-base-200">
+            <input type="checkbox" class="toggle toggle-sm toggle-primary" {% if on %}checked{% endif %} />
+            <div class="text-left">
+              <div class="text-sm font-medium">{{ label }}</div>
+              <div class="text-[11px] opacity-60">{{ desc }}</div>
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

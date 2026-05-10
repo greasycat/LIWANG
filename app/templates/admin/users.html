@@ -1,0 +1,15 @@
+{% extends "admin/_layout.html" %}
+{% block title %}用户管理 · 管理后台{% endblock %}
+{% block admin_title %}用户管理{% endblock %}
+{% block admin_sub %}<p class="text-sm opacity-60 mt-1">{{ rows|length }} 个用户 · 当前月份 {{ month }}</p>{% endblock %}
+{% block admin_actions %}
+<button class="btn btn-primary btn-sm gap-1">
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+  新增用户
+</button>
+{% endblock %}
+
+{% block admin_body %}
+{% include "admin/_users_table.html" %}
+<div id="modal-slot"></div>
+{% endblock %}

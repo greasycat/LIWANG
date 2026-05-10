@@ -1,0 +1,64 @@
+<dialog class="modal modal-open" x-data x-init="$el.showModal()"
+        @close="document.getElementById('modal-slot').replaceChildren()">
+  <div class="modal-box max-w-md">
+    <h3 class="font-semibold mb-1">编辑用户配额</h3>
+    <p class="text-xs opacity-60 mb-4">{{ user_row.display_name }} · <span class="font-mono">{{ user_row.username }}</span></p>
+
+    <form hx-post="/admin/users/{{ user_row.id }}/quota"
+          hx-target="#users-table" hx-swap="outerHTML"
+          hx-on::after-request="document.getElementById('modal-slot').replaceChildren()"
+          class="space-y-3">
+
+      <div>
+        <div class="label py-1">
+          <span class="label-text text-xs">最高访问级别</span>
+          <span class="label-text-alt text-[10px] opacity-60">决定能检索的文档</span>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5" x-data="{ acl: '{{ user_row.acl_max }}' }">
+          {% for v, label, color in [
+            ('public', '公开', 'success'),
+            ('internal', '内部', 'warning'),
+            ('restricted', '受限', 'error'),
+          ] %}
+            <label class="cursor-pointer flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border-2 transition-colors text-sm"
+                   :class="acl === '{{ v }}' ? 'border-primary bg-primary/5' : 'border-base-300 hover:bg-base-200'">
+              <input type="radio" name="acl_max" value="{{ v }}" class="hidden"
+                     x-model="acl" {% if user_row.acl_max == v %}checked{% endif %} />
+              <span class="badge badge-{{ color }} badge-sm">{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <label class="form-control">
+        <div class="label py-1">
+          <span class="label-text text-xs">月度 token 上限</span>
+          <span class="label-text-alt text-[10px] opacity-60">留空 = 无限制</span>
+        </div>
+        <input type="number" name="monthly_token_cap" min="0" step="1000"
+               value="{{ user_row.monthly_token_cap if user_row.monthly_token_cap else '' }}"
+               class="input input-bordered input-sm" />
+      </label>
+
+      <label class="form-control">
+        <div class="label py-1">
+          <span class="label-text text-xs">个人空间存储上限 (MB)</span>
+          <span class="label-text-alt text-[10px] opacity-60">已用 {{ used_bytes | filesize }}</span>
+        </div>
+        <input type="number" name="storage_quota_mb" min="1" step="50"
+               value="{{ (user_row.storage_quota_bytes / 1024 / 1024) | round(0, 'floor') | int }}"
+               class="input input-bordered input-sm" />
+        <div class="label py-1">
+          <span class="label-text-alt text-[10px] opacity-50">默认 100 MB · 最低 1 MB · 不影响知识库文档</span>
+        </div>
+      </label>
+
+      <div class="modal-action mt-4">
+        <button type="button" class="btn btn-ghost btn-sm"
+                @click="document.getElementById('modal-slot').replaceChildren()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

@@ -1,0 +1,40 @@
+<dialog class="modal modal-open" x-data="{ acl: '{{ doc.acl }}' }" x-init="$el.showModal()"
+        @close="document.getElementById('modal-slot').replaceChildren()">
+  <div class="modal-box max-w-md">
+    <h3 class="font-semibold mb-1">设置文档访问级别</h3>
+    <p class="text-xs opacity-60 mb-4 truncate">📄 {{ doc.source }}</p>
+
+    <form hx-post="/admin/docs/{{ doc.id }}/acl"
+          hx-target="#doc-row-{{ doc.id }}" hx-swap="outerHTML"
+          hx-on::after-request="document.getElementById('modal-slot').replaceChildren()"
+          class="space-y-3">
+
+      <div class="space-y-2">
+        {% for v, label, color, desc in [
+          ('public', '公开', 'success', '所有用户可检索 + 进入 LLM 上下文'),
+          ('internal', '内部', 'warning', '内部级用户可见'),
+          ('restricted', '受限', 'error', '仅受限级用户可见'),
+        ] %}
+          <label class="flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors"
+                 :class="acl === '{{ v }}' ? 'border-primary bg-primary/5' : 'border-base-300 hover:bg-base-200'">
+            <input type="radio" name="acl" value="{{ v }}" class="radio radio-sm mt-0.5"
+                   x-model="acl" {% if doc.acl == v %}checked{% endif %} />
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="badge badge-{{ color }} badge-sm">{{ label }}</span>
+              </div>
+              <div class="text-xs opacity-60 mt-1">{{ desc }}</div>
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="modal-action mt-4">
+        <button type="button" class="btn btn-ghost btn-sm"
+                @click="document.getElementById('modal-slot').replaceChildren()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

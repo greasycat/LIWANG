@@ -1,0 +1,54 @@
+<dialog class="modal modal-open" x-data x-init="$el.showModal()"
+        @close="document.getElementById('modal-slot').replaceChildren()">
+  <div class="modal-box max-w-md">
+    <h3 class="font-semibold mb-1">编辑元数据</h3>
+    <p class="text-xs opacity-60 mb-4 truncate">{{ item.filename }}</p>
+    <form hx-patch="/admin/upload/{{ item.id }}"
+          hx-target="closest dialog"
+          hx-swap="outerHTML"
+          hx-on::after-request="document.getElementById('modal-slot').replaceChildren(); document.body.dispatchEvent(new Event('htmx:trigger-table-refresh'))"
+          class="space-y-3">
+
+      <label class="form-control">
+        <div class="label py-1"><span class="label-text text-xs">部门</span></div>
+        <select name="dept" class="select select-bordered select-sm">
+          {% for d in ['R&D', 'QA', '生产', '供应链', 'HR', '采购'] %}
+            <option {% if item.dept == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="form-control">
+          <div class="label py-1"><span class="label-text text-xs">类型</span></div>
+          <input type="text" name="doc_type" value="{{ item.doc_type }}" class="input input-bordered input-sm" />
+        </label>
+        <label class="form-control">
+          <div class="label py-1"><span class="label-text text-xs">版本</span></div>
+          <input type="text" name="version" value="{{ item.version }}" class="input input-bordered input-sm" />
+        </label>
+      </div>
+
+      <label class="form-control">
+        <div class="label py-1"><span class="label-text text-xs">访问级别</span></div>
+        <select name="acl" class="select select-bordered select-sm">
+          <option value="public" {% if item.acl == 'public' %}selected{% endif %}>公开</option>
+          <option value="internal" {% if item.acl == 'internal' %}selected{% endif %}>内部</option>
+          <option value="restricted" {% if item.acl == 'restricted' %}selected{% endif %}>受限</option>
+        </select>
+      </label>
+
+      <label class="cursor-pointer label justify-start gap-2 py-1">
+        <input type="checkbox" name="no_llm" class="toggle toggle-sm toggle-primary" {% if item.no_llm %}checked{% endif %} />
+        <span class="text-xs">仅检索 (no-LLM)</span>
+      </label>
+
+      <div class="modal-action mt-4">
+        <button type="button" class="btn btn-ghost btn-sm"
+                @click="document.getElementById('modal-slot').replaceChildren()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm">保存</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

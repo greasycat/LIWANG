@@ -1,0 +1,49 @@
+<tr id="doc-row-{{ d.id }}" data-doc-row data-id="{{ d.id }}" class="hover">
+  <td>
+    <input type="checkbox" class="checkbox checkbox-xs"
+           :checked="isSelected('{{ d.id }}')"
+           @change="toggle('{{ d.id }}')" />
+  </td>
+  <td>
+    <div class="flex items-center gap-2">
+      <span class="text-base">📄</span>
+      <span class="font-medium text-sm">{{ d.source }}</span>
+    </div>
+  </td>
+  <td><span class="text-sm opacity-80">{{ d.dept }}</span></td>
+  <td><span class="badge badge-ghost badge-sm">{{ d.doc_type }}</span></td>
+  <td class="font-mono text-xs">{{ d.version }}</td>
+  <td class="font-mono text-xs opacity-70">{{ d.effective_date }}</td>
+  <td>
+    <button class="badge badge-sm cursor-pointer hover:opacity-80
+                   {% if d.acl == 'restricted' %}badge-error
+                   {% elif d.acl == 'internal' %}badge-warning
+                   {% else %}badge-success{% endif %}"
+            hx-get="/admin/docs/{{ d.id }}/acl-form"
+            hx-target="#modal-slot" hx-swap="innerHTML"
+            title="点击修改">
+      {% if d.acl == 'restricted' %}受限{% elif d.acl == 'internal' %}内部{% else %}公开{% endif %}
+    </button>
+  </td>
+  <td class="text-center">
+    <input type="checkbox" class="toggle toggle-xs toggle-primary" {% if d.no_llm %}checked{% endif %} />
+  </td>
+  <td class="text-right font-mono text-xs">{{ d.chunks }}</td>
+  <td>
+    {% if d.embed_status == 'done' %}<span class="badge badge-success badge-sm">已索引</span>
+    {% elif d.embed_status == 'embedding' %}<span class="badge badge-info badge-sm">嵌入中</span>
+    {% elif d.embed_status == 'failed' %}<span class="badge badge-error badge-sm">失败</span>
+    {% else %}<span class="badge badge-ghost badge-sm">{{ d.embed_status }}</span>{% endif %}
+  </td>
+  <td>
+    <div class="dropdown dropdown-end">
+      <button tabindex="0" class="btn btn-ghost btn-xs">⋯</button>
+      <ul tabindex="0" class="dropdown-content menu menu-xs bg-base-100 rounded-box z-50 w-32 p-1 shadow border border-base-300">
+        <li><a>查看</a></li>
+        <li><a hx-get="/admin/docs/{{ d.id }}/acl-form" hx-target="#modal-slot" hx-swap="innerHTML">修改访问</a></li>
+        <li><a>重新嵌入</a></li>
+        <li><a class="text-error">删除</a></li>
+      </ul>
+    </div>
+  </td>
+</tr>

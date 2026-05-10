@@ -1,0 +1,219 @@
+{% extends "admin/_layout.html" %}
+{% block title %}批量上传 · 管理后台{% endblock %}
+{% block admin_title %}批量上传{% endblock %}
+{% block admin_sub %}<p class="text-sm opacity-60 mt-1">拖拽文件到下方 · 上传前可批量编辑元数据</p>{% endblock %}
+
+{% block admin_body %}
+<div x-data="uploadManager()" x-init="init()">
+
+  {# Drag-drop intake #}
+  <div class="mb-4">
+    <div :class="dragging ? 'border-primary bg-primary/5' : 'border-base-300'"
+         @dragover.prevent="dragging = true"
+         @dragleave.prevent="dragging = false"
+         @drop.prevent="dragging = false; uploadFiles($event.dataTransfer.files)"
+         class="card border-2 border-dashed transition-colors bg-base-100">
+      <div class="card-body py-5 px-6 flex-row items-center gap-5">
+        <div class="text-3xl">📤</div>
+        <div class="flex-1">
+          <div class="font-medium text-sm">拖拽文件到此处，或</div>
+          <div class="text-xs opacity-60 mt-0.5">支持 PDF / Word / Excel / PPT / HTML · 上传后会进入下方暂存区，可在提交前编辑元数据</div>
+        </div>
+        <label class="btn btn-primary btn-sm gap-2 cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
+          选择文件
+          <input type="file" multiple class="hidden" @change="uploadFiles($event.target.files); $event.target.value = ''" />
+        </label>
+        <template x-if="uploading">
+          <div class="flex items-center gap-2 text-xs opacity-70">
+            <span class="loading loading-spinner loading-xs"></span><span>上传中…</span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  {# Filter tabs with counts #}
+  <div role="tablist" class="tabs tabs-bordered mb-3">
+    {% set tabs = [
+      ('all', '全部', counts.all),
+      ('queued', status_labels.queued, counts.queued),
+      ('uploading', status_labels.uploading, counts.uploading),
+      ('parsing', status_labels.parsing, counts.parsing),
+      ('embedding', status_labels.embedding, counts.embedding),
+      ('done', status_labels.done, counts.done),
+      ('failed', status_labels.failed, counts.failed),
+    ] %}
+    {% for key, label, n in tabs %}
+      <button role="tab" class="tab gap-1.5 {% if active_filter == key %}tab-active text-primary{% endif %}"
+              hx-get="/admin/upload/table{% if key != 'all' %}?status={{ key }}{% endif %}"
+              hx-target="#upload-table"
+              hx-swap="outerHTML"
+              hx-on::after-request="document.querySelectorAll('[role=tab]').forEach(t => t.classList.remove('tab-active','text-primary')); this.classList.add('tab-active','text-primary')">
+        <span>{{ label }}</span>
+        {% if n %}<span class="badge badge-sm {% if key == 'failed' and n %}badge-error{% elif key in ('uploading','parsing','embedding') and n %}badge-info{% else %}badge-ghost{% endif %}">{{ n }}</span>{% endif %}
+      </button>
+    {% endfor %}
+    <div class="ml-auto text-xs opacity-60 self-center">
+      <template x-if="counts.active > 0">
+        <span class="flex items-center gap-1.5">
+          <span class="loading loading-ring loading-xs"></span>
+          <span><span x-text="counts.active"></span> 个进行中</span>
+        </span>
+      </template>
+    </div>
+  </div>
+
+  {# Bulk action bar (sticky, appears on selection) #}
+  <div x-show="selected.size > 0" x-cloak x-transition
+       class="sticky top-2 z-20 mb-3 rounded-xl bg-primary text-primary-content shadow-lg">
+    <div class="px-4 py-2.5 flex flex-wrap items-center gap-2">
+      <span class="text-sm font-medium">已选择 <span x-text="selected.size" class="font-mono"></span> 项</span>
+      <span class="opacity-30">|</span>
+
+      <div class="dropdown">
+        <button tabindex="0" class="btn btn-sm btn-ghost text-primary-content hover:bg-primary-content/10 gap-1">
+          部门 <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"/></svg>
+        </button>
+        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 text-base-content rounded-box w-40 p-1 shadow-lg border border-base-300 mt-1 z-50">
+          {% for d in ['R&D', 'QA', '生产', '供应链', 'HR', '采购'] %}
+            <li><a @click="bulk('set_dept', '{{ d }}')">{{ d }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="dropdown">
+        <button tabindex="0" class="btn btn-sm btn-ghost text-primary-content hover:bg-primary-content/10 gap-1">
+          类型 <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"/></svg>
+        </button>
+        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 text-base-content rounded-box w-40 p-1 shadow-lg border border-base-300 mt-1 z-50">
+          {% for t in ['SOP', 'BOM', '规格', '手册', '审核', '工艺', '合同', '其他'] %}
+            <li><a @click="bulk('set_type', '{{ t }}')">{{ t }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="dropdown">
+        <button tabindex="0" class="btn btn-sm btn-ghost text-primary-content hover:bg-primary-content/10 gap-1">
+          访问 <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"/></svg>
+        </button>
+        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 text-base-content rounded-box w-40 p-1 shadow-lg border border-base-300 mt-1 z-50">
+          <li><a @click="bulk('set_acl', 'public')">公开</a></li>
+          <li><a @click="bulk('set_acl', 'internal')">内部</a></li>
+          <li><a @click="bulk('set_acl', 'restricted')">受限</a></li>
+        </ul>
+      </div>
+
+      <div class="dropdown">
+        <button tabindex="0" class="btn btn-sm btn-ghost text-primary-content hover:bg-primary-content/10 gap-1">
+          仅检索 <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"/></svg>
+        </button>
+        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 text-base-content rounded-box w-32 p-1 shadow-lg border border-base-300 mt-1 z-50">
+          <li><a @click="bulk('set_no_llm', 'true')">开启</a></li>
+          <li><a @click="bulk('set_no_llm', 'false')">关闭</a></li>
+        </ul>
+      </div>
+
+      <span class="opacity-30">|</span>
+
+      <button class="btn btn-sm bg-primary-content/20 hover:bg-primary-content/30 border-0 text-primary-content gap-1"
+              @click="bulk('start')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+        提交处理
+      </button>
+
+      <button class="btn btn-sm bg-error/80 hover:bg-error border-0 text-error-content gap-1 ml-auto"
+              @click="if(confirm('删除选中的 ' + selected.size + ' 项?')) bulk('delete')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3"/></svg>
+        删除
+      </button>
+
+      <button class="btn btn-ghost btn-sm text-primary-content hover:bg-primary-content/10"
+              @click="clearSelection()" title="取消选择">✕</button>
+    </div>
+  </div>
+
+  {# Live-refresh wrapper for in-progress rows #}
+  <div hx-get="/admin/upload/table{% if active_filter and active_filter != 'all' %}?status={{ active_filter }}{% endif %}"
+       hx-trigger="every 2s [document.querySelector('[data-status=uploading],[data-status=parsing],[data-status=embedding]')]"
+       hx-target="#upload-table"
+       hx-swap="outerHTML">
+    {% include "admin/_upload_table.html" %}
+  </div>
+
+  <div id="modal-slot"></div>
+</div>
+
+<script>
+function uploadManager() {
+  return {
+    selected: new Set(),
+    dragging: false,
+    uploading: false,
+    counts: {{ counts | tojson }},
+    init() {
+      document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (e.target.id === 'upload-table' || (e.target.querySelector && e.target.querySelector('#upload-table'))) {
+          this.recountFromDom();
+          this.pruneSelection();
+        }
+      });
+    },
+    recountFromDom() {
+      const rows = document.querySelectorAll('[data-upload-row]');
+      const c = { all: 0, queued: 0, uploading: 0, parsing: 0, embedding: 0, done: 0, failed: 0 };
+      rows.forEach(r => { c.all++; const s = r.dataset.status; if (c[s] !== undefined) c[s]++; });
+      c.active = c.queued + c.uploading + c.parsing + c.embedding;
+      this.counts = c;
+    },
+    pruneSelection() {
+      const live = new Set(Array.from(document.querySelectorAll('[data-upload-row]')).map(r => r.dataset.id));
+      for (const id of [...this.selected]) if (!live.has(id)) this.selected.delete(id);
+      this.selected = new Set(this.selected);
+    },
+    toggle(id) {
+      if (this.selected.has(id)) this.selected.delete(id);
+      else this.selected.add(id);
+      this.selected = new Set(this.selected);
+    },
+    isSelected(id) { return this.selected.has(id); },
+    selectAll(checked) {
+      const ids = Array.from(document.querySelectorAll('[data-upload-row]')).map(r => r.dataset.id);
+      if (checked) ids.forEach(i => this.selected.add(i));
+      else ids.forEach(i => this.selected.delete(i));
+      this.selected = new Set(this.selected);
+    },
+    clearSelection() { this.selected.clear(); this.selected = new Set(); },
+    swapTableFromResponse(html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const fresh = doc.querySelector('#upload-table');
+      if (fresh) document.querySelector('#upload-table').replaceWith(fresh);
+      this.recountFromDom();
+    },
+    async uploadFiles(fileList) {
+      const files = Array.from(fileList);
+      if (!files.length) return;
+      this.uploading = true;
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      try {
+        const r = await fetch('/admin/upload/intake', { method: 'POST', body: fd });
+        if (r.ok) this.swapTableFromResponse(await r.text());
+      } finally { this.uploading = false; }
+    },
+    async bulk(action, value) {
+      if (action !== 'delete' && this.selected.size === 0) return;
+      const fd = new FormData();
+      fd.append('action', action);
+      this.selected.forEach(id => fd.append('ids', id));
+      if (value !== undefined) fd.append('value', value);
+      const r = await fetch('/admin/upload/bulk', { method: 'POST', body: fd });
+      if (r.ok) {
+        this.swapTableFromResponse(await r.text());
+        if (action === 'delete') this.clearSelection();
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

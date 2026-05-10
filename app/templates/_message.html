@@ -1,0 +1,47 @@
+{% if m.role == "user" %}
+  <div class="flex justify-end">
+    <div class="chat-bubble-user max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap">{{ m.content }}</div>
+  </div>
+{% else %}
+  <div class="flex gap-3">
+    <div class="avatar placeholder shrink-0">
+      <div class="bg-primary text-primary-content w-8 h-8 rounded-lg">
+        <span class="text-[10px] font-semibold">LIWANG</span>
+      </div>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="prose prose-sm max-w-none text-sm leading-relaxed whitespace-pre-wrap">{{ m.content }}</div>
+
+      {% if m.citations %}
+        <div class="mt-3 pt-3 border-t border-base-300/60">
+          <div class="text-[10px] uppercase tracking-wider opacity-50 mb-1.5">来源</div>
+          <ul class="space-y-1">
+            {% for c in m.citations %}
+              <li>
+                <a hx-get="/docs/{{ c.doc_id }}/view" hx-target="#citation-drawer" hx-swap="innerHTML"
+                   class="link link-hover text-xs flex items-center gap-1.5">
+                  <span class="badge badge-sm badge-ghost font-mono">{{ c.label }}</span>
+                  <span>{{ c.source }}{% if c.page %} · 第 {{ c.page }} 页{% endif %}</span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <div class="mt-2 flex items-center gap-1 text-xs opacity-60">
+        <button class="btn btn-ghost btn-xs px-1.5" aria-label="点赞"
+                hx-post="/messages/{{ m.id }}/rating?value=1" hx-swap="none">👍</button>
+        <button class="btn btn-ghost btn-xs px-1.5" aria-label="点踩"
+                hx-post="/messages/{{ m.id }}/rating?value=-1" hx-swap="none">👎</button>
+        <button class="btn btn-ghost btn-xs px-1.5" aria-label="复制"
+                @click="navigator.clipboard.writeText({{ m.content | tojson }})">📋</button>
+        {% if m.prompt_tokens %}
+          <span class="ml-auto font-mono text-[10px] opacity-40">
+            {{ m.prompt_tokens }}↑ {{ m.completion_tokens }}↓ · ¥{{ '%.4f' % m.cost_cny }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endif %}

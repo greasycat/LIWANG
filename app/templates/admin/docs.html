@@ -1,0 +1,118 @@
+{% extends "admin/_layout.html" %}
+{% block title %}文档库 · 管理后台{% endblock %}
+{% block admin_title %}文档库{% endblock %}
+{% block admin_sub %}<p class="text-sm opacity-60 mt-1">{{ docs|length }} 个文档</p>{% endblock %}
+{% block admin_actions %}
+<div class="flex gap-2">
+  <label class="input input-sm input-bordered flex items-center gap-2">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    <input type="text" placeholder="搜索文档名…" class="grow w-48" />
+  </label>
+  <a href="/admin/upload" class="btn btn-primary btn-sm">上传</a>
+</div>
+{% endblock %}
+
+{% block admin_body %}
+<div x-data="docsManager()" x-init="init()">
+
+  {# Bulk action bar — sticky, appears when rows selected #}
+  <div x-show="selected.size > 0" x-cloak x-transition
+       class="sticky top-2 z-20 mb-3 rounded-xl bg-primary text-primary-content shadow-lg">
+    <div class="px-4 py-2.5 flex flex-wrap items-center gap-2">
+      <span class="text-sm font-medium">已选择 <span x-text="selected.size" class="font-mono"></span> 个文档</span>
+      <span class="opacity-30">|</span>
+
+      <div class="dropdown">
+        <button tabindex="0" class="btn btn-sm btn-ghost text-primary-content hover:bg-primary-content/10 gap-1">
+          访问级别 <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"/></svg>
+        </button>
+        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 text-base-content rounded-box w-32 p-1 shadow-lg border border-base-300 mt-1 z-50">
+          <li><a @click="bulk('set_acl', 'public')"><span class="badge badge-success badge-sm">公开</span></a></li>
+          <li><a @click="bulk('set_acl', 'internal')"><span class="badge badge-warning badge-sm">内部</span></a></li>
+          <li><a @click="bulk('set_acl', 'restricted')"><span class="badge badge-error badge-sm">受限</span></a></li>
+        </ul>
+      </div>
+
+      <div class="dropdown">
+        <button tabindex="0" class="btn btn-sm btn-ghost text-primary-content hover:bg-primary-content/10 gap-1">
+          仅检索 <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 011.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"/></svg>
+        </button>
+        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 text-base-content rounded-box w-32 p-1 shadow-lg border border-base-300 mt-1 z-50">
+          <li><a @click="bulk('set_no_llm', 'true')">开启</a></li>
+          <li><a @click="bulk('set_no_llm', 'false')">关闭</a></li>
+        </ul>
+      </div>
+
+      <span class="opacity-30">|</span>
+
+      <button class="btn btn-sm bg-primary-content/20 hover:bg-primary-content/30 border-0 text-primary-content gap-1"
+              @click="bulk('reembed')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        重新嵌入
+      </button>
+
+      <button class="btn btn-sm bg-error/80 hover:bg-error border-0 text-error-content gap-1 ml-auto"
+              @click="if(confirm('删除选中的 ' + selected.size + ' 个文档? 此操作不可撤销。')) bulk('delete')">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3"/></svg>
+        删除
+      </button>
+
+      <button class="btn btn-ghost btn-sm text-primary-content hover:bg-primary-content/10"
+              @click="clearSelection()" title="取消选择">✕</button>
+    </div>
+  </div>
+
+  {% include "admin/_docs_table.html" %}
+  <div id="modal-slot"></div>
+</div>
+
+<script>
+function docsManager() {
+  return {
+    selected: new Set(),
+    init() {
+      document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (e.target.id === 'docs-table' || (e.target.querySelector && e.target.querySelector('#docs-table'))) {
+          this.pruneSelection();
+        }
+      });
+    },
+    toggle(id) {
+      if (this.selected.has(id)) this.selected.delete(id);
+      else this.selected.add(id);
+      this.selected = new Set(this.selected);
+    },
+    isSelected(id) { return this.selected.has(id); },
+    selectAll(checked) {
+      const ids = Array.from(document.querySelectorAll('[data-doc-row]')).map(r => r.dataset.id);
+      if (checked) ids.forEach(i => this.selected.add(i));
+      else ids.forEach(i => this.selected.delete(i));
+      this.selected = new Set(this.selected);
+    },
+    clearSelection() { this.selected.clear(); this.selected = new Set(); },
+    pruneSelection() {
+      const live = new Set(Array.from(document.querySelectorAll('[data-doc-row]')).map(r => r.dataset.id));
+      for (const id of [...this.selected]) if (!live.has(id)) this.selected.delete(id);
+      this.selected = new Set(this.selected);
+    },
+    swapTable(html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const fresh = doc.querySelector('#docs-table');
+      if (fresh) document.querySelector('#docs-table').replaceWith(fresh);
+    },
+    async bulk(action, value) {
+      if (this.selected.size === 0) return;
+      const fd = new FormData();
+      fd.append('action', action);
+      this.selected.forEach(id => fd.append('ids', id));
+      if (value !== undefined) fd.append('value', value);
+      const r = await fetch('/admin/docs/bulk', { method: 'POST', body: fd });
+      if (r.ok) {
+        this.swapTable(await r.text());
+        if (action === 'delete') this.clearSelection();
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+<header class="navbar bg-base-100 border-b border-base-300 h-14 min-h-14 px-3 sticky top-0 z-40">
+  <div class="navbar-start gap-2">
+    <label for="sidebar-drawer" class="btn btn-ghost btn-sm md:hidden" aria-label="切换侧边栏">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+    </label>
+    <a href="/" class="btn btn-ghost btn-sm normal-case text-base font-semibold tracking-tight">
+      <span class="text-primary">LIWANG</span>
+      <span class="opacity-70 font-normal">知识助手</span>
+    </a>
+    {% if current_user %}
+      <nav class="hidden md:flex items-center gap-0.5 ml-2">
+        {% set is_files = request.url.path.startswith('/files') %}
+        {% set is_admin = request.url.path.startswith('/admin') %}
+        {% set is_chat = not is_files and not is_admin %}
+        <a href="/" class="btn btn-ghost btn-sm {% if is_chat %}bg-base-200{% endif %}">对话</a>
+        <a href="/files" class="btn btn-ghost btn-sm {% if is_files %}bg-base-200{% endif %}">我的文件</a>
+        {% if current_user.role == "admin" %}
+          <a href="/admin" class="btn btn-ghost btn-sm {% if is_admin %}bg-base-200{% endif %}">管理后台</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  </div>
+
+  <div class="navbar-end gap-2">
+    {% if current_user %}
+      {% if month_tokens_cap %}
+        <div class="hidden sm:flex items-center gap-2 text-xs">
+          <span class="opacity-60">本月</span>
+          <span class="font-mono">{{ month_tokens_used | intcomma }}</span>
+          <span class="opacity-40">/</span>
+          <span class="font-mono opacity-70">{{ month_tokens_cap | intcomma }}</span>
+          <progress class="progress progress-primary w-20 h-1.5" value="{{ month_tokens_used }}" max="{{ month_tokens_cap }}"></progress>
+        </div>
+      {% else %}
+        <span class="hidden sm:inline text-xs opacity-60">本月 <span class="font-mono">{{ month_tokens_used | intcomma }}</span> tokens</span>
+      {% endif %}
+
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-2">
+          <div class="avatar placeholder">
+            <div class="bg-primary text-primary-content w-7 rounded-full">
+              <span class="text-xs">{{ current_user.display_name[:1] }}</span>
+            </div>
+          </div>
+          <span class="hidden sm:inline">{{ current_user.display_name }}</span>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 rounded-box z-50 mt-2 w-52 p-2 shadow-lg border border-base-300">
+          <li class="menu-title"><span>{{ current_user.username }}</span></li>
+          <li><a @click="document.documentElement.dataset.theme = (document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark')">切换主题</a></li>
+          {% if current_user.role == "admin" %}<li><a href="/admin">管理后台</a></li>{% endif %}
+          <li><form action="/logout" method="post"><button class="w-full text-left">退出登录</button></form></li>
+        </ul>
+      </div>
+    {% else %}
+      <a href="/login" class="btn btn-primary btn-sm">登录</a>
+    {% endif %}
+  </div>
+</header>

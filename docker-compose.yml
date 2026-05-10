@@ -1,0 +1,18 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: liwang-db
+    environment:
+      POSTGRES_USER: liwang
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liwang}
+      POSTGRES_DB: liwang
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liwang"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
