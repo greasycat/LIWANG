@@ -44,8 +44,8 @@ Out of scope: CAD, ERP/MES live data, video.
 │  └──────┬──────┘  │  docs, chunks,       │  │
 │         │         │  ocr_jobs, query_log │  │
 │  ┌──────▼──────┐  └──────────────────────┘  │
-│  │  Static UI  │                            │
-│  │  HTMX/Tail. │                            │
+│  │  Next.js    │                            │
+│  │  (SSR + RSC)│                            │
 │  └─────────────┘                            │
 └─────┬────────────────────────────┬──────────┘
       │ HTTPS                      │ HTTPS
@@ -70,7 +70,8 @@ That's it. No Redis, no RabbitMQ, no S3 — VPS holds the originals + OCR output
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Web | FastAPI | One process, uvicorn |
+| Web (API) | FastAPI | JSON-only API at `/api/*`, served by uvicorn |
+| Web (UI) | **Next.js 15 (App Router) + React 19** | Server-rendered pages in `web/`, proxies `/api/*` to FastAPI to keep the session cookie same-origin |
 | Storage | **Postgres 16 + pgvector** | One DB for everything: vectors, metadata, users, sessions, ocr_jobs, query_log. No Milvus, no ES, no separate metadata store. |
 | Lexical | Postgres FTS (`tsvector`) + **zhparser** or **pg_jieba** | zh tokenization extension; same DB as vectors → single hybrid query |
 | File store | Local disk on VPS (`data/originals/`, `data/ocr/`) | Postgres holds DB + extracted text; raw blobs on disk. Daily rsync backup |
@@ -82,7 +83,7 @@ That's it. No Redis, no RabbitMQ, no S3 — VPS holds the originals + OCR output
 | Orchestration | **LlamaIndex** | Used for embedding adapter + chunking helpers + ingestion pipeline. Avoid heavy abstractions; thin wrapper. |
 | Reranker | bge-reranker-v2-m3 (small) on VPS CPU; or skip in P0 | Optional. Alternative: DashScope rerank API if added later. |
 | LLM | DeepSeek-V3 (chat), R1 only when needed | Public API. Called direct (not via LlamaIndex LLM wrapper) to keep streaming + token capture explicit. |
-| UI | Jinja2 templates + **HTMX** (partials + SSE) + **Alpine.js** (client state) + **Tailwind CSS** + **daisyUI** components + **Chart.js** (admin) | No SPA, no Node build. Tailwind via standalone binary in CI for purged CSS; everything else via CDN. See §8.2. |
+| UI | **Next.js 15 (App Router)** + **React 19** + **Tailwind** + **daisyUI** | SSR pages with client components for interactive surfaces (chat composer + SSE consumer, file table, admin tables). Replaced the original Jinja2/HTMX/Alpine stack in milestone-by-milestone PRs. |
 | Auth | Username/password (bcrypt) — `users` table in Postgres | 20 users — overkill avoided |
 | Migrations | Alembic | Single source of truth for schema |
 | Logs | stdout → systemd journal; `query_log` table in Postgres | |
@@ -278,44 +279,59 @@ No 12+ week multi-team plan. One developer can ship P0–P2.
 ```
 LIWANG/
 ├── PLAN.md
-├── app/                       # FastAPI
+├── app/                       # FastAPI (JSON API only — all routes under /api)
 │   ├── routes/
-│   │   ├── chat.py            # /, /c/{id}, /c/{id}/stream
-│   │   ├── sessions.py        # /sessions CRUD
-│   │   ├── docs.py            # /docs/{id}/view
-│   │   ├── auth.py            # /login /logout
-│   │   ├── admin.py           # /admin/*
-│   │   └── ocr_jobs.py        # /ocr-jobs/*
-│   ├── ingest.py              # upload + parse + chunk + embed + index
-│   ├── retrieve.py            # hybrid search + rerank
-│   ├── generate.py            # DeepSeek call + prompt + SSE
-│   ├── llm/                   # deepseek client, prompt templates
-│   ├── embed/                 # DashScope wrapper, embed_log writer
-│   └── templates/             # Jinja2 + HTMX
-│       ├── _layout.html       # top bar + sidebar shell
-│       ├── _sidebar.html      # session list partial
-│       ├── chat.html          # main chat column
-│       ├── _message.html      # message partial (SSE swap target)
-│       ├── _citations.html    # citation drawer partial
-│       └── admin/
-│           ├── overview.html
-│           ├── users.html
-│           ├── usage.html
-│           ├── docs.html
-│           ├── upload.html
-│           ├── ocr.html
-│           ├── eval.html
-│           └── settings.html
-├── app/static/                # tailwind-built css, htmx + alpine + chart.js (vendored), pdfjs
+│   │   ├── auth.py            # /api/auth/{login,logout,me}
+│   │   ├── sessions.py        # /api/sessions CRUD
+│   │   ├── chat.py            # /api/sessions/{sid}/messages, /api/messages/{mid}/stream (SSE)
+│   │   ├── docs.py            # /api/docs/{id}/{view,raw,download}
+│   │   ├── files.py           # /api/files/* (per-user file space)
+│   │   ├── admin.py           # /api/admin/{overview,users,docs,usage,ocr}
+│   │   ├── admin_files.py     # /api/admin/files/{user_id}/*
+│   │   ├── uploads.py         # /api/admin/upload/* (intake staging)
+│   │   └── ocr_jobs.py        # /api/ocr-jobs/* (runner endpoints)
+│   ├── schemas.py             # Pydantic response models (single source of truth for JSON shape)
+│   ├── services/              # ingest, retrieval, llm, embedding, extraction
+│   └── …
+├── web/                       # Next.js 15 (App Router) frontend
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── (auth)/login/page.tsx
+│   │   │   └── (app)/         # auth-gated layout (Topbar + Sidebar)
+│   │   │       ├── page.tsx                  # / -> redirects to first session
+│   │   │       ├── c/[sid]/page.tsx          # chat page (SSE consumer)
+│   │   │       ├── files/{page,folder/[id]/page}.tsx
+│   │   │       └── admin/
+│   │   │           ├── layout.tsx            # requireAdmin gate
+│   │   │           ├── page.tsx              # overview
+│   │   │           ├── users, docs, upload, ocr, usage
+│   │   │           └── files/[uid]/...
+│   │   ├── components/        # Topbar, Sidebar, ChatView, FilesPage, modals, admin tables
+│   │   ├── lib/               # api.ts (server + client fetchers), auth.ts, format.ts, types.ts
+│   │   └── middleware.ts      # cheap unauth redirect via session-cookie presence
+│   ├── next.config.mjs        # rewrites /api/* and /healthz to FastAPI
+│   ├── tailwind.config.ts     # daisyUI + typography
+│   └── package.json
 ├── ocr_runner/                # standalone — runs on GPU box
 │   ├── runner.py              # poll loop
 │   └── pipeline.py            # PaddleOCR + MinerU
 ├── eval/                      # 30–50 Q&A pairs + scoring script
 ├── migrations/                # alembic — users, sessions, docs, chunks, ocr_jobs, query_log, embed_log
 ├── data/                      # gitignored: originals/, ocr/
-├── scripts/                   # backup.sh, import_folder.py, build_css.sh (tailwind purge)
-├── tailwind.config.js         # content globs → templates/**/*.html
+├── scripts/
+│   ├── run_dev.sh             # spawns FastAPI + Next.js together
+│   ├── migrate.sh
+│   └── db_shell.sh
 └── deploy/                    # Caddyfile, systemd unit, docker-compose (optional)
+```
+
+### Dev quickstart
+
+```bash
+docker compose up -d db          # Postgres + pgvector
+cd web && npm install            # one-time
+./scripts/run_dev.sh             # FastAPI on :8000, Next.js on :3000
+# open http://localhost:3000  (admin/admin)
 ```
 
 ## 15. Next Actions
