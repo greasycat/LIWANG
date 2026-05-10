@@ -1,4 +1,4 @@
-import { Sidebar } from "@/components/sidebar";
+import { SidebarShell } from "@/components/sidebar-shell";
 import { Topbar } from "@/components/topbar";
 import { apiServer } from "@/lib/api";
 import { requireMe } from "@/lib/auth";
@@ -21,7 +21,7 @@ export default async function AppLayout({
         <aside className="drawer-side z-30">
           <label htmlFor="sidebar-drawer" className="drawer-overlay" />
           <div className="w-72 h-full bg-base-100 border-r border-base-300">
-            <Sidebar sessions={sessions} />
+            <SidebarShell sessions={sessions} />
           </div>
         </aside>
       </div>
